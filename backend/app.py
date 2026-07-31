@@ -776,9 +776,14 @@ def balance(household_id: int):
             total_paid = float(cur.fetchone()['total'])
             cur.execute('SELECT IFNULL(SUM(es.share_amount), 0) AS total FROM expenses e JOIN expense_shares es ON e.id = es.expense_id WHERE e.household_id = %s AND e.payer_id = %s AND es.member_id = %s AND e.archived = 0', (household_id, member['id'], my_member_id))
             total_received = float(cur.fetchone()['total'])
+            cur.execute('SELECT IFNULL(SUM(amount), 0) AS total FROM settlements WHERE household_id = %s AND from_member_id = %s AND to_member_id = %s', (household_id, my_member_id, member['id']))
+            from_me = cur.fetchone()
+            cur.execute('SELECT IFNULL(SUM(amount), 0) AS total FROM settlements WHERE household_id = %s AND from_member_id = %s AND to_member_id = %s', (household_id, member['id'], my_member_id))
+            to_me = cur.fetchone()
+            net = round(total_paid - total_received + float(from_me['total']) - float(to_me['total']), 2)
             cur.execute('SELECT COUNT(*) AS cnt FROM chore_completions cc JOIN chores c ON cc.chore_id = c.id WHERE c.household_id = %s AND cc.completed_by_id = %s', (household_id, member['id']))
             chore_count = cur.fetchone()['cnt']
-            breakdown.append({'member_id': member['id'], 'user_id': member['user_id'], 'name': member['name'], 'total_paid': total_paid, 'total_received': total_received, 'chore_count': chore_count})
+            breakdown.append({'member_id': member['id'], 'user_id': member['user_id'], 'name': member['name'], 'total_paid': total_paid, 'total_received': total_received, 'net_balance': net, 'chore_count': chore_count})
 
         return jsonify({
             'money_balance': money_balance,

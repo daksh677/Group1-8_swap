@@ -4,10 +4,8 @@ import { useAuth } from '../context/AuthContext';
 
 export default function Chores() {
   const { household } = useAuth();
-  const [allChores, setAllChores] = useState([]);
-  const [todo, setTodo] = useState([]);
+  const [list, setList] = useState([]);
   const [leaderboard, setLeaderboard] = useState([]);
-  const [selectedChore, setSelectedChore] = useState('');
   const [message, setMessage] = useState('');
 
   const fetchData = async () => {
@@ -17,32 +15,17 @@ export default function Chores() {
         chores.list(household.household_id),
         chores.leaderboard(household.household_id),
       ]);
-      setAllChores(c);
+      setList(c);
       setLeaderboard(lb);
     } catch {}
   };
 
   useEffect(() => { fetchData(); }, [household]);
 
-  const handleAddToTodo = () => {
-    if (!selectedChore) return;
-    const chore = allChores.find(c => c.id === parseInt(selectedChore, 10));
-    if (!chore) return;
-    if (todo.find(t => t.id === chore.id)) return;
-    setTodo([...todo, chore]);
-    setSelectedChore('');
-  };
-
-  const handleRemoveFromTodo = (choreId) => {
-    setTodo(todo.filter(c => c.id !== choreId));
-    setMessage('');
-  };
-
   const handleComplete = async (choreId) => {
     setMessage('');
     try {
       const result = await chores.complete(household.household_id, choreId);
-      setTodo(todo.filter(c => c.id !== choreId));
       setMessage(`${result.chore_name} completed! +${result.points} pts for you, -${result.points} for others`);
       fetchData();
     } catch (err) {
@@ -50,56 +33,47 @@ export default function Chores() {
     }
   };
 
-  const availableChores = allChores.filter(c => !todo.find(t => t.id === c.id));
+  const handleAdd = async (choreName, chorePoints) => {
+    setMessage('');
+    try {
+      await chores.create(household.household_id, { name: choreName, points: chorePoints });
+      fetchData();
+    } catch (err) {
+      setMessage(err.message);
+    }
+  };
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
       <div className="space-y-4">
-        <h2 className="text-lg font-bold">Chores</h2>
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-bold">Chores</h2>
+        </div>
 
         {message && <p className="text-green-600 text-sm font-medium">{message}</p>}
 
-        <div className="flex gap-2 items-end">
-          <div className="flex-1">
-            <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1 block">Add a chore</label>
-            <select value={selectedChore} onChange={e => setSelectedChore(e.target.value)}
-              className="w-full border border-gray-300 rounded px-3 py-2 text-sm">
-              <option value="">Pick a chore...</option>
-              {availableChores.map(c => (
-                <option key={c.id} value={c.id}>{c.name} ({c.points}pts)</option>
-              ))}
-            </select>
-          </div>
-          <button onClick={handleAddToTodo} disabled={!selectedChore}
-            className="bg-blue-600 text-white text-sm px-3 py-2 rounded hover:bg-blue-700 disabled:opacity-40">
-            Add
-          </button>
-        </div>
+        <AddChoreForm onAdd={handleAdd} />
 
         <table className="w-full border border-gray-200 rounded-lg overflow-hidden">
           <thead>
             <tr className="bg-gray-50">
               <th className="text-left text-xs font-semibold text-gray-500 px-4 py-2">Chore</th>
               <th className="text-left text-xs font-semibold text-gray-500 px-4 py-2">Points</th>
-              <th className="text-left text-xs font-semibold text-gray-500 px-4 py-2">Action</th>
+              <th className="text-left text-xs font-semibold text-gray-500 px-4 py-2">Done</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
-            {todo.length === 0 ? (
-              <tr><td colSpan={3} className="text-center text-gray-500 text-sm py-8">No chores added yet. Pick from the dropdown above.</td></tr>
+            {list.length === 0 ? (
+              <tr><td colSpan={3} className="text-center text-gray-500 text-sm py-8">No chores yet.</td></tr>
             ) : (
-              todo.map(chore => (
+              list.map(chore => (
                 <tr key={chore.id} className="hover:bg-gray-50">
                   <td className="px-4 py-3 text-sm font-medium">{chore.name}</td>
                   <td className="px-4 py-3 text-sm text-gray-600">{chore.points}</td>
-                  <td className="px-4 py-3 flex gap-2">
+                  <td className="px-4 py-3">
                     <button onClick={() => handleComplete(chore.id)}
                       className="text-xs bg-green-600 text-white px-3 py-1.5 rounded hover:bg-green-700">
                       Done
-                    </button>
-                    <button onClick={() => handleRemoveFromTodo(chore.id)}
-                      className="text-xs text-gray-400 hover:text-red-500 px-2 py-1">
-                      Remove
                     </button>
                   </td>
                 </tr>
@@ -134,5 +108,45 @@ export default function Chores() {
         )}
       </div>
     </div>
+  );
+}
+
+function AddChoreForm({ onAdd }) {
+  const [show, setShow] = useState(false);
+  const [name, setName] = useState('');
+  const [points, setPoints] = useState('');
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!name || !points) return;
+    await onAdd(name, parseInt(points, 10));
+    setName('');
+    setPoints('');
+    setShow(false);
+  };
+
+  return (
+    <>
+      <button onClick={() => setShow(!show)} className="text-xs text-blue-600 hover:underline">
+        {show ? 'Cancel' : 'Add chore'}
+      </button>
+      {show && (
+        <form onSubmit={handleSubmit} className="flex gap-2 items-center bg-gray-50 border border-gray-200 rounded-lg p-3">
+          <input type="text" placeholder="Chore name" value={name} onChange={e => setName(e.target.value)} required
+            className="flex-1 border border-gray-300 rounded px-3 py-1.5 text-sm" />
+          <select value={points} onChange={e => setPoints(e.target.value)} required
+            className="border border-gray-300 rounded px-3 py-1.5 text-sm">
+            <option value="">Points</option>
+            <option value="50">50</option>
+            <option value="100">100</option>
+            <option value="150">150</option>
+            <option value="200">200</option>
+          </select>
+          <button type="submit" className="bg-blue-600 text-white text-sm px-3 py-1.5 rounded hover:bg-blue-700">
+            Add
+          </button>
+        </form>
+      )}
+    </>
   );
 }
